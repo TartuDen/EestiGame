@@ -32,15 +32,15 @@ async function getRandomWordAndTranslations(userSimpleWords, filePath, nextWord 
         let selectedWord;
 
         if (nextWord) {
-            // If nextWord is provided, find it in the words array by matching against the English word
-            selectedWord = words.find(word => word['English Word'] === nextWord);
+            // If nextWord is provided, find it in the words array by matching against the Estonian word
+            selectedWord = words.find(word => word['Estonian Word'] === nextWord);
             if (!selectedWord) {
                 throw new Error('Provided nextWord not found in the word list.');
             }
         } else {
-            // Step 2: Filter out words already known to the user based on their English words
+            // Step 2: Filter out words already known to the user based on their Estonian words
             const newWords = words.filter(word => 
-                !userSimpleWords.includes(word['English Word'])
+                !userSimpleWords.includes(word['Estonian Word'])
             );
 
             if (newWords.length === 0) {
@@ -57,7 +57,7 @@ async function getRandomWordAndTranslations(userSimpleWords, filePath, nextWord 
 
         // Step 5: Select additional words from the same category
         let sameCategoryWords = words.filter(word =>
-            word.Category === category && word['Russian Translation'] !== selectedWord['Russian Translation']
+            word.Category === category && word['English Translation'] !== selectedWord['English Translation']
         );
 
         const additionalWords = [];
@@ -89,8 +89,5 @@ async function getRandomWordAndTranslations(userSimpleWords, filePath, nextWord 
         throw err;
     }
 }
-
-
-
 
 export default getRandomWordAndTranslations;
