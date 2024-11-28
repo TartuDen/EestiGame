@@ -1,187 +1,232 @@
-// apiCalls.js
-import { pool } from "./pgTables.js";
-import bcrypt from 'bcrypt';
+// funcs.js
+import getRandomWordAndTranslations from "./word_selector.js";
+import { less_struggle_word_interval, struggle_barrier } from "./settings.js";
+import fs from 'fs';
+import csv from 'csv-parser';
+import bcrypt from 'bcrypt'; // Added bcrypt import
 
-async function getUser(email, fromTable) {
-  try {
-    const client = await pool.connect();
-    const query = `SELECT * FROM ${fromTable} WHERE email = $1`;
-    const result = await client.query(query, [email]);
-    client.release(); // Release the client back to the pool
+const SALT_ROUNDS = 10; // Added SALT_ROUNDS constant
 
-    if (result.rows.length === 0) {
-      return null; // User not found, return null instead of using `res`
-    }
-    return result.rows[0]; // Return user object
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    throw new Error("Internal server error"); // Throw an error to be caught by the calling function
-  }
+function calculateXpForNextLevel(level) {
+  const base = 100;
+  const exponent = 1.5;
+  return Math.floor(base * Math.pow(level, exponent));
 }
 
-async function regUser(user) {
-  const { user_name, email, ava } = user;
+function addExperience(user_info, xpGained) {
+  user_info.current_xp += xpGained;
 
-  try {
-    const client = await pool.connect();
-    const query = `
-      INSERT INTO users (user_name, email, ava)
-      VALUES ($1, $2, $3)
-      RETURNING *`;
-    const values = [user_name, email, ava];
-    const result = await client.query(query, values);
-    client.release(); // Release the client back to the pool
-
-    return result.rows[0]; // Return the newly registered user object
-  } catch (error) {
-    console.error("Error registering user:", error);
-    if (error.code === "23505") {
-      throw new Error("Email already exists"); // Handle unique constraint violation
-    } else {
-      throw new Error("Internal server error");
-    }
+  // Check if the user has enough XP to level up
+  while (user_info.current_xp >= calculateXpForNextLevel(user_info.level)) {
+    user_info.current_xp -= calculateXpForNextLevel(user_info.level);
+    user_info.level += 1;
   }
+
+  return user_info;
 }
 
-// Function to register user with email
-async function regUserWEmail(userName, email, password) {
-  try {
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+function subtractExperience(user_info, xpLost) {
+  // Subtract XP from the user's current XP
+  user_info.current_xp -= xpLost;
 
-    const result = await pool.query(
-      `INSERT INTO email_users (user_name, email, password)
-       VALUES ($1, $2, $3)
-       RETURNING id, user_name, email, created_at`,
-      [userName, email, hashedPassword]
+  // Ensure current XP does not fall below zero
+  if (user_info.current_xp < 0) {
+    user_info.current_xp = 0;
+  }
+
+  // Do not modify the level, even if XP falls below the level threshold
+
+  return user_info;
+}
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+async function selectWordForUser(req) {
+  try {
+    let selectedWord, additionalWords;
+
+    // Initialize word count if it doesn't exist
+    if (!req.session.wordCount) {
+      req.session.wordCount = 0;
+    }
+
+    // Increment word count for each call
+    req.session.wordCount += 1;
+
+    // Filter words where the user guessed wrongly > struggle_barrier of the time
+    const struggledWords = req.session.userWordDetails.filter((wordDetail) => {
+      const totalGuesses =
+        wordDetail.guessed_correctly + wordDetail.guessed_wrong;
+      const wrongPercentage = wordDetail.guessed_wrong / totalGuesses;
+      return totalGuesses > 0 && wrongPercentage > struggle_barrier;
+    });
+
+    // Filter words where the user guessed wrongly <= struggle_barrier of the time
+    const lessStruggledWords = req.session.userWordDetails.filter(
+      (wordDetail) => {
+        const totalGuesses =
+          wordDetail.guessed_correctly + wordDetail.guessed_wrong;
+        const wrongPercentage = wordDetail.guessed_wrong / totalGuesses;
+        return totalGuesses > 0 && wrongPercentage <= struggle_barrier;
+      }
     );
 
-    return result.rows[0];
-  } catch (error) {
-    console.error('Error registering user:', error);
-    throw error;
-  }
-}
+    if (
+      req.session.wordCount % less_struggle_word_interval === 0 &&
+      lessStruggledWords.length > 0
+    ) {
+      // Every nth word: pick a word the user struggles with less
+      const lessStruggledWordDetails =
+        lessStruggledWords[getRandomInt(lessStruggledWords.length)];
+      const lessStruggledWord = lessStruggledWordDetails.estonian_word; // Updated to 'estonian_word'
+      const totalGuesses =
+        lessStruggledWordDetails.guessed_correctly +
+        lessStruggledWordDetails.guessed_wrong;
+      const wrongPercentage = (
+        (lessStruggledWordDetails.guessed_wrong / totalGuesses) *
+        100
+      ).toFixed(2);
 
-// Function to get user information
-async function getUserInfo(userId) {
-  try {
-    // Try to get the user information
-    const { rows } = await pool.query(
-      `SELECT * FROM user_info WHERE user_id = $1`,
-      [userId]
-    );
-
-    if (rows.length === 0) {
-      // If user info is not found, create a new entry with level 0 and current_xp 0
-      const { rows: newRows } = await pool.query(
-        `INSERT INTO user_info (user_id, level, current_xp)
-               VALUES ($1, $2, $3)
-               RETURNING *`,
-        [userId, 0, 0]
+      console.log(
+        `Selected less struggled word: ${lessStruggledWord}, Struggle %: ${wrongPercentage}%`
       );
-      return newRows[0]; // Return the newly created user info
+
+      ({ selectedWord, additionalWords } = await getRandomWordAndTranslations(
+        req.session.userSimpleWords,
+        "words.csv",
+        lessStruggledWord
+      ));
+    } else if (req.session.wordSelectionToggle) {
+      // Toggle is true: Attempt to pick a word the user struggles with more
+      if (struggledWords.length > 0) {
+        const struggledWordDetails =
+          struggledWords[getRandomInt(struggledWords.length)];
+        const struggledWord = struggledWordDetails.estonian_word; // Updated to 'estonian_word'
+        const totalGuesses =
+          struggledWordDetails.guessed_correctly +
+          struggledWordDetails.guessed_wrong;
+        const wrongPercentage = (
+          (struggledWordDetails.guessed_wrong / totalGuesses) *
+          100
+        ).toFixed(2);
+
+        console.log(
+          `Selected struggled word: ${struggledWord}, Struggle %: ${wrongPercentage}%`
+        );
+
+        ({ selectedWord, additionalWords } = await getRandomWordAndTranslations(
+          req.session.userSimpleWords,
+          "words.csv",
+          struggledWord
+        ));
+      } else {
+        // No struggled words found, fallback to new word selection without specifying nextWord
+        console.log("No struggled words found, selecting a new word.");
+        ({ selectedWord, additionalWords } = await getRandomWordAndTranslations(
+          req.session.userSimpleWords,
+          "words.csv"
+        ));
+      }
+    } else {
+      // Toggle is false: Pick a completely new word
+      console.log("Selected a completely new word.");
+      ({ selectedWord, additionalWords } = await getRandomWordAndTranslations(
+        req.session.userSimpleWords,
+        "words.csv"
+      ));
     }
 
-    return rows[0]; // Return the found user info
-  } catch (err) {
-    console.error("Error getting or creating user info:", err.message);
-    throw err;
-  }
-}
+    // Toggle the value for the next call
+    req.session.wordSelectionToggle = !req.session.wordSelectionToggle;
 
-// Function to update user information
-async function updateUserInfo(userId, level, currentXp) {
-  try {
-    const result = await pool.query(
-      `UPDATE user_info
-           SET level = $1, current_xp = $2
-           WHERE user_id = $3
-           RETURNING *`,
-      [level, currentXp, userId]
-    );
-
-    if (result.rowCount === 0) {
-      throw new Error("User info not found or update failed");
-    }
-
-    return result.rows[0];
-  } catch (err) {
-    console.error("Error updating user info:", err.message);
-    throw err;
-  }
-}
-
-async function updateCorrectAnswer(userId, word) {
-  try {
-    // Upsert into user_words table for a correct answer
-    await pool.query(
-      `
-      INSERT INTO user_words (user_id, word, guessed_correctly, guessed_wrong)
-      VALUES ($1, $2, 1, 0)
-      ON CONFLICT (user_id, word)
-      DO UPDATE SET guessed_correctly = user_words.guessed_correctly + 1;
-    `,
-      [userId, word]
-    );
-  } catch (err) {
-    console.error("Error updating correct answer:", err.message);
-    throw err;
-  }
-}
-
-async function updateWrongAnswer(userId, word) {
-  try {
-    // Upsert into user_words table for a wrong answer
-    await pool.query(
-      `
-      INSERT INTO user_words (user_id, word, guessed_wrong, guessed_correctly)
-      VALUES ($1, $2, 1, 0)
-      ON CONFLICT (user_id, word)
-      DO UPDATE SET guessed_wrong = user_words.guessed_wrong + 1;
-    `,
-      [userId, word]
-    );
-  } catch (err) {
-    console.error("Error updating wrong answer:", err.message);
-    throw err;
-  }
-}
-
-async function userKnownWords(userId) {
-  try {
-    // Query the database to get words that the user has already interacted with
-    const userWordsQuery = `
-            SELECT word, guessed_correctly, guessed_wrong
-            FROM user_words 
-            WHERE user_id = $1;
-        `;
-    const { rows: userWords } = await pool.query(userWordsQuery, [userId]);
-
-    // Extract the words from the query result
-    const userSimpleWords = userWords.map((uw) => uw.word);
-
-    // Return both the list of known words and the entire userWords object
-    return {
-      userSimpleWords,  // simplified list of words
-      userWordDetails: userWords  // detailed objects with word, guessed_correctly, and guessed_wrong
-    };
+    // Return the selected word and additional words
+    return { selectedWord, additionalWords };
   } catch (error) {
-    console.error('Error fetching user known words:', error);
+    console.error("Error selecting word for user:", error);
     throw error;
   }
 }
 
+function calculateAndSortWordStatistics(userWords, struggle_barrier) {
+  const statistics = userWords.map((wordObj) => {
+    const totalGuesses = wordObj.guessed_correctly + wordObj.guessed_wrong;
+    const strugglePercent =
+      totalGuesses > 0
+        ? ((wordObj.guessed_wrong / totalGuesses) * 100).toFixed(2)
+        : "0.00"; // If no guesses, set percentage to 0
 
+    return {
+      estonian_word: wordObj.estonian_word, // Updated to 'estonian_word'
+      struggle_percent: parseFloat(strugglePercent), // Convert string percentage to a number for filtering and sorting
+      guessed: totalGuesses,
+    };
+  });
 
+  // Filter by struggle percentage based on the struggle barrier
+  const filteredStatistics = statistics.filter(
+    (stat) => stat.struggle_percent / 100 > struggle_barrier
+  );
+
+  // Sort by struggle percent in descending order (highest % of wrong guesses at the top)
+  filteredStatistics.sort((a, b) => b.struggle_percent - a.struggle_percent);
+
+  // Convert the struggle percent back to string format with "%" sign
+  return filteredStatistics.map((stat) => ({
+    ...stat,
+    struggle_percent: `${stat.struggle_percent}%`,
+  }));
+}
+
+async function searchWordInCSV(wordsArray) {
+  if (Array.isArray(wordsArray)) {
+    const csvData = [];
+
+    // Load the entire CSV file into memory
+    await new Promise((resolve, reject) => {
+      fs.createReadStream("words.csv")
+        .pipe(csv())
+        .on("data", (data) => csvData.push(data))
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    // Iterate over the input array of words and add translations
+    const updatedWordsArray = wordsArray.map((item) => {
+      const word = item.estonian_word.toLowerCase(); // Updated to 'estonian_word'
+      const matchedRow = csvData.find(
+        (row) => row["Estonian Word"].toLowerCase() === word // Updated to 'Estonian Word'
+      );
+
+      // Add the translation if the word is found
+      return {
+        ...item,
+        translation: matchedRow
+          ? matchedRow["English Translation"] // Updated to 'English Translation'
+          : "Not found",
+      };
+    });
+
+    return updatedWordsArray;
+  }
+}
+
+async function hashPassword(password) {
+  return await bcrypt.hash(password, SALT_ROUNDS);
+}
+
+async function verifyPassword(password, hashedPassword) {
+  return await bcrypt.compare(password, hashedPassword);
+}
 
 export {
-  getUser,
-  regUser,
-  getUserInfo,
-  updateUserInfo,
-  updateCorrectAnswer,
-  updateWrongAnswer,
-  userKnownWords,
-  regUserWEmail,
+  hashPassword,
+  verifyPassword,
+  calculateXpForNextLevel,
+  addExperience,
+  subtractExperience,
+  selectWordForUser,
+  calculateAndSortWordStatistics,
+  searchWordInCSV,
 };

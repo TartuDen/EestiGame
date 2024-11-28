@@ -2,12 +2,9 @@
 import pkg from "pg";
 const { Pool } = pkg;
 import dotenv from "dotenv";
-
 import { calculateXpForNextLevel } from "./funcs.js";
 
 dotenv.config();
-
-
 
 const pool = new Pool({
   user: process.env.POSTGRES_USER || 'postgres',
@@ -17,9 +14,7 @@ const pool = new Pool({
   port: process.env.POSTGRES_PORT || 5432,
 });
 
-
 function displayUserProgressInTerminal(userStats) {
-
   // Find the max experience for scaling the XP bar
   const maxExperience = Math.max(
     1, // Ensure maxExperience is at least 1 to avoid division by zero or negative scaling
@@ -40,17 +35,16 @@ function displayUserProgressInTerminal(userStats) {
   });
 }
 
-
 async function getUserStats(userId) {
   try {
     // Fetch all sessions for the user
     const { rows } = await pool.query(
       `
-            SELECT played_at, experience_gained, words_played, words_guessed_correctly, time_played 
-            FROM sessions 
-            WHERE user_id = $1 
-            ORDER BY played_at ASC
-        `,
+      SELECT played_at, experience_gained, words_played, words_guessed_correctly, time_played 
+      FROM sessions 
+      WHERE user_id = $1 
+      ORDER BY played_at ASC
+      `,
       [userId]
     );
 
@@ -106,9 +100,9 @@ async function showUserStats(userId) {
 
     // Cleanup old sessions (older than 5 days)
     const deleteResult = await pool.query(`
-                 DELETE FROM sessions 
-                 WHERE played_at < NOW() - INTERVAL '5 days';
-             `);
+      DELETE FROM sessions 
+      WHERE played_at < NOW() - INTERVAL '5 days';
+    `);
 
     console.log(`${deleteResult.rowCount} old session(s) deleted.`);
   } catch (error) {
@@ -122,60 +116,59 @@ async function createTables() {
 
     // Create the users table
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                user_name VARCHAR(100) NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                ava TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
-            );
-        `);
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        user_name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        ava TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     await pool.query(`
-          CREATE TABLE IF NOT EXISTS email_users (
-          id SERIAL PRIMARY KEY,
-          user_name VARCHAR(100),
-          email VARCHAR(100) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+      CREATE TABLE IF NOT EXISTS email_users (
+        id SERIAL PRIMARY KEY,
+        user_name VARCHAR(100),
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // Create the user_info table
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS user_info (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                level INTEGER NOT NULL,
-                current_xp INTEGER NOT NULL
-            );
-        `);
+      CREATE TABLE IF NOT EXISTS user_info (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        level INTEGER NOT NULL,
+        current_xp INTEGER NOT NULL
+      );
+    `);
 
     // Create the sessions table
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS sessions (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                played_at TIMESTAMP NOT NULL,
-                experience_gained INTEGER NOT NULL,
-                words_played INTEGER NOT NULL,
-                words_guessed_correctly INTEGER NOT NULL,
-                time_played INTEGER NOT NULL -- Time in minutes
-            );
-        `);
+      CREATE TABLE IF NOT EXISTS sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        played_at TIMESTAMP NOT NULL,
+        experience_gained INTEGER NOT NULL,
+        words_played INTEGER NOT NULL,
+        words_guessed_correctly INTEGER NOT NULL,
+        time_played INTEGER NOT NULL -- Time in minutes
+      );
+    `);
 
     // Create the user_words table
     await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_words (
+      CREATE TABLE IF NOT EXISTS user_words (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        word VARCHAR(100) NOT NULL,
+        estonian_word VARCHAR(100) NOT NULL, -- Changed 'word' to 'estonian_word'
         guessed_correctly INTEGER NOT NULL,
         guessed_wrong INTEGER NOT NULL,
-        CONSTRAINT user_word_unique UNIQUE(user_id, word)
-    );
-`);
+        CONSTRAINT user_word_unique UNIQUE(user_id, estonian_word) -- Updated constraint
+      );
+    `);
 
     console.log("Tables created successfully");
   } catch (error) {
