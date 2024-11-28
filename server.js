@@ -8,7 +8,6 @@ import dotenv from "dotenv";
 import bcrypt from 'bcrypt';
 import { Strategy as LocalStrategy } from "passport-local";
 
-
 import {
   calculateXpForNextLevel,
   addExperience,
@@ -36,8 +35,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8081;
 const SALT_ROUNDS = 10;
-
-
 
 // 2. Database and Error Handling
 class AppError extends Error {
@@ -82,7 +79,6 @@ async function startSession(req, res, next) {
   if (req.isAuthenticated()) {
     const userId = req.user.id;
     await showUserStats(userId);
-
 
     const { userSimpleWords, userWordDetails } = await userKnownWords(userId);
     req.session.userSimpleWords = userSimpleWords;
@@ -182,7 +178,6 @@ async function endSession(req) {
       await sendEmail(user.email, experienceGained, wordsPlayed, wordsGuessedCorrectly);
     }
 
-
     try {
       await pool.query(
         `UPDATE sessions 
@@ -202,12 +197,11 @@ async function endSession(req) {
   }
 }
 
-
 // Add Local Strategy
 passport.use(
   "local",
   new LocalStrategy(
-    { usernameField: "email" }, 
+    { usernameField: "email" },
     async (email, password, done) => {
       try {
         let user = await getUser(email, "email_users");
@@ -247,12 +241,11 @@ app.post('/login', (req, res, next) => {
   })(req, res, next);
 });
 
-
-
 // 5. Route Definitions
-app.get("/register",async(req,res, next)=>{
+app.get("/register", async (req, res, next) => {
+  // Registration page rendering logic
+});
 
-})
 app.post("/register", async (req, res, next) => {
   const { userName, email, password } = req.body;
 
@@ -281,7 +274,6 @@ app.get("/login", (req, res) => {
   res.render("login.ejs");
 });
 
-
 app.post(
   "/login",
   passport.authenticate("local", {
@@ -293,8 +285,7 @@ app.post(
   }
 );
 
-
-// ____________________Google OAuth routes
+// Google OAuth routes
 app.get(
   "/auth/google",
   passport.authenticate("google", {
@@ -309,13 +300,10 @@ app.get(
     failureRedirect: "/login",
   }),
   startSession, // Start the session after successful authentication
-
   (req, res) => {
     res.redirect("/");
   }
 );
-
-
 
 app.get("/", async (req, res, next) => {
   try {
@@ -336,12 +324,11 @@ app.get("/", async (req, res, next) => {
       // Store the selected word in the session and mark it as unanswered
       req.session.selectedWord = selectedWord;
       req.session.unansweredWord = true;  // Mark the word as unanswered
-      const sortedWordStatistics = calculateAndSortWordStatistics(req.session.userWordDetails,struggle_barrier);
+      const sortedWordStatistics = calculateAndSortWordStatistics(req.session.userWordDetails, struggle_barrier);
       const wordStatsWithTranslations = await searchWordInCSV(sortedWordStatistics);
 
       const row = await searchWordInCSV(selectedWord['']);
 
-      // console.log(".....selectW...\n",selectedWord);
       res.status(200).render("index.ejs", {
         user,
         user_info,
@@ -358,7 +345,6 @@ app.get("/", async (req, res, next) => {
   }
 });
 
-
 app.post("/correct_answer", async (req, res, next) => {
   try {
     if (req.isAuthenticated()) {
@@ -366,7 +352,7 @@ app.post("/correct_answer", async (req, res, next) => {
       const user_info = req.session.user_info;
       const selectedWord = req.session.selectedWord;
       const difficulty = parseInt(selectedWord.Difficulty, 10);
-      const word = selectedWord["English Word"];
+      const word = selectedWord["Estonian Word"]; // Changed to 'Estonian Word'
 
       // Update session values
       req.session.wordsPlayed += 1;
@@ -390,14 +376,13 @@ app.post("/correct_answer", async (req, res, next) => {
   }
 });
 
-
 app.post("/wrong_answer", async (req, res, next) => {
   try {
     if (req.isAuthenticated()) {
       const userId = req.user.id;
       const user_info = req.session.user_info;
       const selectedWord = req.session.selectedWord;
-      const word = selectedWord["English Word"];
+      const word = selectedWord["Estonian Word"]; // Changed to 'Estonian Word'
 
       // Update session values
       req.session.wordsPlayed += 1;
@@ -425,7 +410,7 @@ app.get("/wrong_answer", async (req, res, next) => {
     if (req.isAuthenticated()) {
       const userId = req.user.id;
       const selectedWord = req.session.selectedWord;
-      const word = selectedWord["English Word"];
+      const word = selectedWord["Estonian Word"]; // Changed to 'Estonian Word'
 
       // Mark the word as incorrect in the database
       await updateWrongAnswer(userId, word);
@@ -447,7 +432,6 @@ app.get("/wrong_answer", async (req, res, next) => {
     next(err);
   }
 });
-
 
 app.get("/auth/logout", async (req, res) => {
   try {
@@ -475,3 +459,4 @@ app.listen(PORT, (err) => {
 
 // Use the error handler middleware
 app.use(errorHandler);
+
