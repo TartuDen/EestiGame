@@ -8,9 +8,9 @@ dotenv.config();
 
 const pool = new Pool({
   user: process.env.POSTGRES_USER || 'postgres',
-  host: process.env.POSTGRES_HOST || 'db',
-  database: process.env.POSTGRES_DB || 'wordgame2',
-  password: process.env.POSTGRES_PASSWORD || '123',
+  host: process.env.POSTGRES_HOST || 'localhost',
+  database: process.env.POSTGRES_DB || 'eesti_game1',
+  password: process.env.POSTGRES_PASSWORD || 'Plot123',
   port: process.env.POSTGRES_PORT || 5432,
 });
 
@@ -49,7 +49,13 @@ async function getUserStats(userId) {
     );
 
     if (rows.length === 0) {
-      throw new Error("No session data found for this user");
+      // Return default stats instead of throwing an error
+      return {
+        progressData: [],
+        totalWordsPlayed: 0,
+        totalWordsGuessedCorrectly: 0,
+        totalTimePlayed: 0,
+      };
     }
 
     let progressData = [];
@@ -91,7 +97,7 @@ async function getUserStats(userId) {
 
 async function showUserStats(userId) {
   try {
-    // Fetch the logged-in user's data (replace `userId` with the actual user ID)
+    // Fetch the logged-in user's data
     const userStats = await getUserStats(userId);
     console.log("........userStats......\n", userStats);
 
@@ -120,20 +126,12 @@ async function createTables() {
         id SERIAL PRIMARY KEY,
         user_name VARCHAR(100) NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
-        ava TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS email_users (
-        id SERIAL PRIMARY KEY,
-        user_name VARCHAR(100),
-        email VARCHAR(100) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Removed the email_users table creation
 
     // Create the user_info table
     await pool.query(`
@@ -163,10 +161,10 @@ async function createTables() {
       CREATE TABLE IF NOT EXISTS user_words (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        estonian_word VARCHAR(100) NOT NULL, -- Changed 'word' to 'estonian_word'
+        estonian_word VARCHAR(100) NOT NULL,
         guessed_correctly INTEGER NOT NULL,
         guessed_wrong INTEGER NOT NULL,
-        CONSTRAINT user_word_unique UNIQUE(user_id, estonian_word) -- Updated constraint
+        CONSTRAINT user_word_unique UNIQUE(user_id, estonian_word)
       );
     `);
 
