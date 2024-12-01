@@ -283,14 +283,14 @@ app.get("/", async (req, res, next) => {
       req.session.selectedWord = selectedWord;
       req.session.unansweredWord = true;  // Mark the word as unanswered
       const sortedWordStatistics = calculateAndSortWordStatistics(req.session.userWordDetails, struggle_barrier);
+      console.log("sortedWordStatistics\n",sortedWordStatistics)
       const wordStatsWithTranslations = await searchWordInCSV(sortedWordStatistics);
+      console.log("wordStatsWithTranslations\n",wordStatsWithTranslations)
 
       console.log("user:\n",user);
       console.log("user_info:\n",user_info);
       console.log("total_exp:\n",total_exp);
-      console.log("selectedWord:\n",selectedWord);
-      console.log("additionalWords:\n",additionalWords);
-      console.log("wordStatsWithTranslations:\n",wordStatsWithTranslations);
+      // console.log("wordStatsWithTranslations:\n",wordStatsWithTranslations);
 
 
       res.status(200).render("index.ejs", {
@@ -309,12 +309,15 @@ app.get("/", async (req, res, next) => {
   }
 });
 
+// server.js
 app.post("/correct_answer", async (req, res, next) => {
   try {
     if (req.isAuthenticated()) {
       const userId = req.user.id;
       const user_info = req.session.user_info;
-      const selectedWord = req.session.selectedWord;
+
+      // Parse the selectedWord from the form data
+      const selectedWord = JSON.parse(req.body.selectedWord);
       const difficulty = parseInt(selectedWord.Difficulty, 10);
       const word = selectedWord["Estonian Word"];
 
@@ -325,7 +328,11 @@ app.post("/correct_answer", async (req, res, next) => {
       req.session.user_info = addExperience(user_info, difficulty);
 
       // Update the user_info and mark the word as answered
-      await updateUserInfo(userId, req.session.user_info.level, req.session.user_info.current_xp);
+      await updateUserInfo(
+        userId,
+        req.session.user_info.level,
+        req.session.user_info.current_xp
+      );
       await updateCorrectAnswer(userId, word);
 
       // Remove the unanswered flag
@@ -340,12 +347,17 @@ app.post("/correct_answer", async (req, res, next) => {
   }
 });
 
+
+
+
 app.post("/wrong_answer", async (req, res, next) => {
   try {
     if (req.isAuthenticated()) {
       const userId = req.user.id;
       const user_info = req.session.user_info;
-      const selectedWord = req.session.selectedWord;
+
+      // Parse the selectedWord from the form data
+      const selectedWord = JSON.parse(req.body.selectedWord);
       const word = selectedWord["Estonian Word"];
 
       // Update session values
@@ -354,7 +366,11 @@ app.post("/wrong_answer", async (req, res, next) => {
       req.session.user_info = subtractExperience(user_info, 1);
 
       // Update the user_info and mark the word as answered
-      await updateUserInfo(userId, req.session.user_info.level, req.session.user_info.current_xp);
+      await updateUserInfo(
+        userId,
+        req.session.user_info.level,
+        req.session.user_info.current_xp
+      );
       await updateWrongAnswer(userId, word);
 
       // Remove the unanswered flag
@@ -368,6 +384,8 @@ app.post("/wrong_answer", async (req, res, next) => {
     next(err);
   }
 });
+
+
 
 app.get("/wrong_answer", async (req, res, next) => {
   try {

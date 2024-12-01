@@ -93,17 +93,17 @@ async function updateUserInfo(userId, level, currentXp) {
   }
 }
 
-async function updateCorrectAnswer(userId, word) {
+async function updateCorrectAnswer(userId, estonianWord) {
   try {
     // Upsert into user_words table for a correct answer
     await pool.query(
       `
-      INSERT INTO user_words (user_id, word, guessed_correctly, guessed_wrong)
+      INSERT INTO user_words (user_id, estonian_word, guessed_correctly, guessed_wrong)
       VALUES ($1, $2, 1, 0)
-      ON CONFLICT (user_id, word)
+      ON CONFLICT (user_id, estonian_word)
       DO UPDATE SET guessed_correctly = user_words.guessed_correctly + 1;
-    `,
-      [userId, word]
+      `,
+      [userId, estonianWord]
     );
   } catch (err) {
     console.error("Error updating correct answer:", err.message);
@@ -111,17 +111,18 @@ async function updateCorrectAnswer(userId, word) {
   }
 }
 
-async function updateWrongAnswer(userId, word) {
+
+async function updateWrongAnswer(userId, estonianWord) {
   try {
     // Upsert into user_words table for a wrong answer
     await pool.query(
       `
-      INSERT INTO user_words (user_id, word, guessed_wrong, guessed_correctly)
+      INSERT INTO user_words (user_id, estonian_word, guessed_wrong, guessed_correctly)
       VALUES ($1, $2, 1, 0)
-      ON CONFLICT (user_id, word)
+      ON CONFLICT (user_id, estonian_word)
       DO UPDATE SET guessed_wrong = user_words.guessed_wrong + 1;
-    `,
-      [userId, word]
+      `,
+      [userId, estonianWord]
     );
   } catch (err) {
     console.error("Error updating wrong answer:", err.message);

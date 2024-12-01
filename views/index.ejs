@@ -95,12 +95,12 @@
               <th class="table-header">Estonian Word</th>
               <th class="table-header">Difficulty</th>
               <th class="table-header">Guessed Count</th>
-              <th class="table-header">English Translation</th> <!-- Updated column header -->
+              <th class="table-header">English Translation</th>
             </tr>
           </thead>
           <tbody>
-            <% 
-              wordStatsWithTranslations.forEach(function(stat) { 
+            <% wordStatsWithTranslations.forEach(function(stat) { %>
+              <% 
                 let difficultyColor, difficultyEmoji; 
                 const strugglePercent = parseFloat(stat.struggle_percent); 
                 if (strugglePercent >= 80) {
@@ -116,35 +116,88 @@
                   difficultyColor = '#FFF9C4'; // Green
                   difficultyEmoji = '🟢';
                 }
-            %>
+              %>
               <tr class="table-row">
                 <td class="table-data">
                   <%= stat.estonian_word %>
                 </td>
                 <td class="table-data" style="background-color: <%= difficultyColor %>;">
-                  <%= difficultyEmoji %>
-                  <%= stat.struggle_percent %>
+                  <%= difficultyEmoji %> <%= stat.struggle_percent %>%
                 </td>
                 <td class="table-data">
                   <%= stat.guessed %>
                 </td>
                 <td class="table-data">
                   <% if (stat.estonian_word === selectedWord['Estonian Word']) { %>
-                    Try to guess! <!-- Hide translation if it matches -->
+                    Try to guess!
                   <% } else { %>
-                    <%= stat.translation || 'Not found' %> <!-- Show translation if it does not match -->
+                    <%= stat.translation || 'Not found' %>
                   <% } %>
                 </td>
               </tr>
             <% }); %>
           </tbody>
         </table>
+      <% } else { %>
+        <p class="text-center">No word statistics available.</p>
       <% } %>
+      
     </div>
   </div>
+  <!-- Modal -->
+  <div class="modal fade" id="myModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
+    aria-labelledby="myModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5" id="myModalLabel">Incorrect Answer</h1>
+        </div>
+        <div class="modal-body">
+          <p id="modal-text"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="submitForm">
+            Submit
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-  <!-- [MODAL AND SCRIPTS REMAIN THE SAME] -->
-  <!-- ... -->
+<script>
+  let currentFormId = "";
+
+  function checkAnswer(userAnswer, correctAnswer, formId) {
+  if (userAnswer === correctAnswer) {
+    document.getElementById(`answerForm_${formId}`).action = "/correct_answer";
+    document.getElementById(`answerForm_${formId}`).submit();
+  } else {
+    currentFormId = `answerForm_${formId}`;
+    showModal(`It is a wrong answer, the correct answer is "${correctAnswer}".`);
+  }
+}
+
+  
+
+  function showModal(message) {
+    const modalText = document.getElementById("modal-text");
+    modalText.textContent = message;
+
+    const myModal = new bootstrap.Modal(document.getElementById("myModal"));
+    myModal.show();
+  }
+
+  document
+    .getElementById("submitForm")
+    .addEventListener("click", function () {
+      if (currentFormId) {
+        document.getElementById(currentFormId).submit();
+      }
+    });
+</script>
+
 </body>
 
 </html>
